@@ -2,6 +2,7 @@
   "name": "shopify-community-app",
   "version": "1.0.0",
   "private": true,
+  "packageManager": "yarn@1.22.19",
   "scripts": {
     "build": "nuxt build",
     "dev": "nuxt dev",
