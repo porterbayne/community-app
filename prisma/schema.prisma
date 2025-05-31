@@ -1,0 +1,548 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../node_modules/.prisma/client"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id                  BigInt     @id @unique @default(autoincrement())
+  created_at          DateTime   @default(now()) @db.Timestamptz(6)
+  updated_at          DateTime   @default(now()) @updatedAt @db.Timestamptz(6)
+  name                String?    @db.VarChar
+  email               String     @db.VarChar @unique
+  shopify_customer_id String?    @db.VarChar
+  temp_token          String?    @map("temp_tokan") @db.VarChar
+  avatar_url          String?    @db.VarChar
+  bio                 String?    @db.Text
+  role                UserRole   @default(USER)
+  status              UserStatus @default(ACTIVE)
+  last_login          DateTime?  @db.Timestamptz(6)
+  
+  // Social & Content relationships
+  posts               Post[]
+  recipes             Recipe[]
+  comments            Comment[]
+  reactions           Reaction[]
+  media               Media[]
+  tags                TagsOnUsers[]
+  followers           Follow[]           @relation("Following")
+  following           Follow[]           @relation("Follower")
+  notifications       Notification[]
+  bookmarks           Bookmark[]
+  activityItems       ActivityFeedItem[] @relation("ActivityUser")
+  emailDigests        EmailDigest[]
+  
+  // Substack-like features
+  notification_preferences    NotificationPreference?
+  email_digest_enabled       Boolean    @default(true)
+  last_digest_sent_at        DateTime?  @db.Timestamptz(6)
+  
+  @@map("User")
+}
+
+enum UserRole {
+  ADMIN
+  MODERATOR
+  USER
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  DEACTIVATED
+}
+
+model Post {
+  id          BigInt   @id @unique @default(autoincrement())
+  created_at  DateTime @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+  title       String   @db.VarChar(255)
+  content     String   @db.Text
+  excerpt     String?  @db.VarChar(500)
+  slug        String   @unique @db.VarChar(255)
+  published   Boolean  @default(false)
+  view_count  Int      @default(0)
+  post_type   PostType @default(ARTICLE)
+  
+  // Relationships
+  author_id   BigInt
+  author      User      @relation(fields: [author_id], references: [id], onDelete: Cascade)
+  comments    Comment[]
+  reactions   Reaction[]
+  media       MediaOnPosts[]
+  tags        TagsOnPosts[]
+  bookmarks   Bookmark[]
+  activityItems ActivityFeedItem[]
+  
+  @@index([author_id])
+  @@index([slug])
+  @@index([published])
+  @@map("Post")
+}
+
+enum PostType {
+  ARTICLE
+  STORY
+  SPICE_TIP
+}
+
+model Recipe {
+  id              BigInt   @id @unique @default(autoincrement())
+  created_at      DateTime @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+  title           String   @db.VarChar(255)
+  content         String   @db.Text
+  excerpt         String?  @db.VarChar(500)
+  slug            String   @unique @db.VarChar(255)
+  published       Boolean  @default(false)
+  view_count      Int      @default(0)
+  prep_time       Int?
+  cook_time       Int?
+  total_time      Int?
+  servings        Int?
+  difficulty      RecipeDifficulty? 
+  
+  // Relationships
+  author_id       BigInt
+  author          User      @relation(fields: [author_id], references: [id], onDelete: Cascade)
+  ingredients     Ingredient[]
+  instructions    Instruction[]
+  comments        Comment[]
+  reactions       Reaction[]
+  media           MediaOnRecipes[]
+  tags            TagsOnRecipes[]
+  bookmarks       Bookmark[]
+  activityItems   ActivityFeedItem[]
+  
+  @@index([author_id])
+  @@index([slug])
+  @@index([published])
+  @@map("Recipe")
+}
+
+enum RecipeDifficulty {
+  EASY
+  MODERATE
+  CHALLENGING
+}
+
+model Ingredient {
+  id              BigInt   @id @unique @default(autoincrement())
+  created_at      DateTime @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+  name            String   @db.VarChar(255)
+  amount          String   @db.VarChar(100)
+  unit            String?  @db.VarChar(50)
+  notes           String?  @db.Text
+  order_index     Int
+  
+  // Relationships
+  recipe_id       BigInt
+  recipe          Recipe    @relation(fields: [recipe_id], references: [id], onDelete: Cascade)
+  
+  @@index([recipe_id])
+  @@map("Ingredient")
+}
+
+model Instruction {
+  id              BigInt   @id @unique @default(autoincrement())
+  created_at      DateTime @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+  step_number     Int
+  content         String   @db.Text
+  
+  // Relationships
+  recipe_id       BigInt
+  recipe          Recipe    @relation(fields: [recipe_id], references: [id], onDelete: Cascade)
+  
+  @@index([recipe_id])
+  @@map("Instruction")
+}
+
+model Comment {
+  id              BigInt   @id @unique @default(autoincrement())
+  created_at      DateTime @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+  content         String   @db.Text
+  is_edited       Boolean  @default(false)
+  
+  // Relationships
+  author_id       BigInt
+  author          User      @relation(fields: [author_id], references: [id], onDelete: Cascade)
+  post_id         BigInt?
+  post            Post?     @relation(fields: [post_id], references: [id], onDelete: Cascade)
+  recipe_id       BigInt?
+  recipe          Recipe?   @relation(fields: [recipe_id], references: [id], onDelete: Cascade)
+  parent_id       BigInt?
+  parent          Comment?  @relation("CommentThreads", fields: [parent_id], references: [id], onDelete: SetNull)
+  replies         Comment[] @relation("CommentThreads")
+  reactions       Reaction[]
+  media           MediaOnComments[]
+  tags            TagsOnComments[]
+  activityItems   ActivityFeedItem[]
+  
+  @@index([author_id])
+  @@index([post_id])
+  @@index([recipe_id])
+  @@index([parent_id])
+  @@map("Comment")
+}
+
+model Reaction {
+  id              BigInt       @id @unique @default(autoincrement())
+  created_at      DateTime     @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime     @default(now()) @updatedAt @db.Timestamptz(6)
+  type            ReactionType
+  
+  // Relationships
+  user_id         BigInt
+  user            User        @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  post_id         BigInt?
+  post            Post?       @relation(fields: [post_id], references: [id], onDelete: Cascade)
+  recipe_id       BigInt?
+  recipe          Recipe?     @relation(fields: [recipe_id], references: [id], onDelete: Cascade)
+  comment_id      BigInt?
+  comment         Comment?    @relation(fields: [comment_id], references: [id], onDelete: Cascade)
+  
+  @@unique([user_id, post_id, recipe_id, comment_id, type])
+  @@index([user_id])
+  @@index([post_id])
+  @@index([recipe_id])
+  @@index([comment_id])
+  @@map("Reaction")
+}
+
+enum ReactionType {
+  LIKE
+  LOVE
+  LAUGH
+  SPICY
+  HELPFUL
+}
+
+model Tag {
+  id              BigInt   @id @unique @default(autoincrement())
+  created_at      DateTime @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+  name            String   @unique @db.VarChar(50)
+  slug            String   @unique @db.VarChar(50)
+  description     String?  @db.Text
+  
+  // Relationships
+  posts           TagsOnPosts[]
+  recipes         TagsOnRecipes[]
+  comments        TagsOnComments[]
+  users           TagsOnUsers[]
+  
+  @@index([slug])
+  @@map("Tag")
+}
+
+model TagsOnPosts {
+  post_id         BigInt
+  post            Post      @relation(fields: [post_id], references: [id], onDelete: Cascade)
+  tag_id          BigInt
+  tag             Tag       @relation(fields: [tag_id], references: [id], onDelete: Cascade)
+  created_at      DateTime  @default(now()) @db.Timestamptz(6)
+  
+  @@id([post_id, tag_id])
+  @@index([post_id])
+  @@index([tag_id])
+  @@map("TagsOnPosts")
+}
+
+model TagsOnRecipes {
+  recipe_id       BigInt
+  recipe          Recipe    @relation(fields: [recipe_id], references: [id], onDelete: Cascade)
+  tag_id          BigInt
+  tag             Tag       @relation(fields: [tag_id], references: [id], onDelete: Cascade)
+  created_at      DateTime  @default(now()) @db.Timestamptz(6)
+  
+  @@id([recipe_id, tag_id])
+  @@index([recipe_id])
+  @@index([tag_id])
+  @@map("TagsOnRecipes")
+}
+
+model TagsOnComments {
+  comment_id      BigInt
+  comment         Comment   @relation(fields: [comment_id], references: [id], onDelete: Cascade)
+  tag_id          BigInt
+  tag             Tag       @relation(fields: [tag_id], references: [id], onDelete: Cascade)
+  created_at      DateTime  @default(now()) @db.Timestamptz(6)
+  
+  @@id([comment_id, tag_id])
+  @@index([comment_id])
+  @@index([tag_id])
+  @@map("TagsOnComments")
+}
+
+model TagsOnUsers {
+  user_id         BigInt
+  user            User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  tag_id          BigInt
+  tag             Tag       @relation(fields: [tag_id], references: [id], onDelete: Cascade)
+  created_at      DateTime  @default(now()) @db.Timestamptz(6)
+  
+  @@id([user_id, tag_id])
+  @@index([user_id])
+  @@index([tag_id])
+  @@map("TagsOnUsers")
+}
+
+model Media {
+  id              BigInt     @id @unique @default(autoincrement())
+  created_at      DateTime   @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime   @default(now()) @updatedAt @db.Timestamptz(6)
+  file_name       String     @db.VarChar(255)
+  file_path       String     @db.VarChar(500)
+  file_size       Int
+  mime_type       String     @db.VarChar(100)
+  alt_text        String?    @db.VarChar(255)
+  caption         String?    @db.Text
+  media_type      MediaType
+  
+  // Relationships
+  user_id         BigInt
+  user            User           @relation(fields: [user_id], references: [id])
+  posts           MediaOnPosts[]
+  recipes         MediaOnRecipes[]
+  comments        MediaOnComments[]
+  
+  @@index([user_id])
+  @@map("Media")
+}
+
+enum MediaType {
+  IMAGE
+  VIDEO
+  AUDIO
+  DOCUMENT
+}
+
+model MediaOnPosts {
+  post_id         BigInt
+  post            Post      @relation(fields: [post_id], references: [id], onDelete: Cascade)
+  media_id        BigInt
+  media           Media     @relation(fields: [media_id], references: [id], onDelete: Cascade)
+  created_at      DateTime  @default(now()) @db.Timestamptz(6)
+  
+  @@id([post_id, media_id])
+  @@index([post_id])
+  @@index([media_id])
+  @@map("MediaOnPosts")
+}
+
+model MediaOnRecipes {
+  recipe_id       BigInt
+  recipe          Recipe    @relation(fields: [recipe_id], references: [id], onDelete: Cascade)
+  media_id        BigInt
+  media           Media     @relation(fields: [media_id], references: [id], onDelete: Cascade)
+  created_at      DateTime  @default(now()) @db.Timestamptz(6)
+  
+  @@id([recipe_id, media_id])
+  @@index([recipe_id])
+  @@index([media_id])
+  @@map("MediaOnRecipes")
+}
+
+model MediaOnComments {
+  comment_id      BigInt
+  comment         Comment   @relation(fields: [comment_id], references: [id], onDelete: Cascade)
+  media_id        BigInt
+  media           Media     @relation(fields: [media_id], references: [id], onDelete: Cascade)
+  created_at      DateTime  @default(now()) @db.Timestamptz(6)
+  
+  @@id([comment_id, media_id])
+  @@index([comment_id])
+  @@index([media_id])
+  @@map("MediaOnComments")
+}
+
+model Follow {
+  id              BigInt   @id @unique @default(autoincrement())
+  created_at      DateTime @default(now()) @db.Timestamptz(6)
+  
+  // Relationships
+  follower_id     BigInt
+  follower        User      @relation("Follower", fields: [follower_id], references: [id], onDelete: Cascade)
+  following_id    BigInt
+  following       User      @relation("Following", fields: [following_id], references: [id], onDelete: Cascade)
+  activityItems   ActivityFeedItem[]
+  
+  @@unique([follower_id, following_id])
+  @@index([follower_id])
+  @@index([following_id])
+  @@map("Follow")
+}
+
+model Notification {
+  id              BigInt           @id @unique @default(autoincrement())
+  created_at      DateTime         @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime         @default(now()) @updatedAt @db.Timestamptz(6)
+  type            NotificationType
+  content         String           @db.Text
+  is_read         Boolean          @default(false)
+  link            String?          @db.VarChar(500)
+  
+  // Relationships
+  user_id         BigInt
+  user            User            @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  
+  @@index([user_id])
+  @@index([is_read])
+  @@map("Notification")
+}
+
+enum NotificationType {
+  FOLLOW
+  COMMENT
+  REACTION
+  MENTION
+  SYSTEM
+}
+
+model Bookmark {
+  id              BigInt   @id @unique @default(autoincrement())
+  created_at      DateTime @default(now()) @db.Timestamptz(6)
+  
+  // Relationships
+  user_id         BigInt
+  user            User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  post_id         BigInt?
+  post            Post?     @relation(fields: [post_id], references: [id], onDelete: Cascade)
+  recipe_id       BigInt?
+  recipe          Recipe?   @relation(fields: [recipe_id], references: [id], onDelete: Cascade)
+  
+  @@unique([user_id, post_id, recipe_id])
+  @@index([user_id])
+  @@index([post_id])
+  @@index([recipe_id])
+  @@map("Bookmark")
+}
+
+model ShopifySync {
+  id                    BigInt   @id @unique @default(autoincrement())
+  created_at            DateTime @default(now()) @db.Timestamptz(6)
+  updated_at            DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+  shopify_resource_id   String   @db.VarChar(255)
+  shopify_resource_type String   @db.VarChar(50)
+  sync_status           SyncStatus @default(PENDING)
+  last_sync_at         DateTime? @db.Timestamptz(6)
+  sync_details         String?   @db.Text
+  
+  @@index([shopify_resource_id, shopify_resource_type])
+  @@index([sync_status])
+  @@map("ShopifySync")
+}
+
+enum SyncStatus {
+  PENDING
+  SYNCED
+  FAILED
+  SKIPPED
+}
+
+model NotificationPreference {
+  id                  BigInt   @id @unique @default(autoincrement())
+  created_at          DateTime @default(now()) @db.Timestamptz(6)
+  updated_at          DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+  
+  // Email notification settings
+  email_new_follower  Boolean  @default(true)
+  email_new_comment   Boolean  @default(true)
+  email_new_reaction  Boolean  @default(true)
+  email_mention       Boolean  @default(true)
+  email_daily_digest  Boolean  @default(true)
+  
+  // In-app notification settings
+  app_new_follower    Boolean  @default(true)
+  app_new_comment     Boolean  @default(true)
+  app_new_reaction    Boolean  @default(true)
+  app_mention         Boolean  @default(true)
+  
+  // Digest preferences
+  digest_time         String   @default("09:00")
+  digest_timezone     String   @default("UTC")
+  
+  // Relationships
+  user_id             BigInt   @unique
+  user                User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  
+  @@map("NotificationPreference")
+}
+
+model EmailDigest {
+  id                  BigInt   @id @unique @default(autoincrement())
+  created_at          DateTime @default(now()) @db.Timestamptz(6)
+  sent_at             DateTime? @db.Timestamptz(6)
+  status              EmailStatus @default(PENDING)
+  
+  // Content summary
+  posts_count         Int      @default(0)
+  comments_count      Int      @default(0)
+  reactions_count     Int      @default(0)
+  new_followers_count Int      @default(0)
+  
+  // Email metadata
+  email_id            String?  @db.VarChar(255)
+  opened_at           DateTime? @db.Timestamptz(6)
+  clicked_at          DateTime? @db.Timestamptz(6)
+  
+  // Relationships
+  user_id             BigInt
+  user                User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  
+  @@index([user_id])
+  @@index([status])
+  @@index([created_at])
+  @@map("EmailDigest")
+}
+
+enum EmailStatus {
+  PENDING
+  SENT
+  FAILED
+  BOUNCED
+  OPENED
+  CLICKED
+}
+
+model ActivityFeedItem {
+  id                  BigInt   @id @unique @default(autoincrement())
+  created_at          DateTime @default(now()) @db.Timestamptz(6)
+  activity_type       ActivityType
+  
+  // Relationships to content
+  user_id             BigInt
+  user                User     @relation("ActivityUser", fields: [user_id], references: [id], onDelete: Cascade)
+  
+  post_id             BigInt?
+  post                Post?    @relation(fields: [post_id], references: [id], onDelete: Cascade)
+  
+  recipe_id           BigInt?
+  recipe              Recipe?  @relation(fields: [recipe_id], references: [id], onDelete: Cascade)
+  
+  comment_id          BigInt?
+  comment             Comment? @relation(fields: [comment_id], references: [id], onDelete: Cascade)
+  
+  follow_id           BigInt?
+  follow              Follow?  @relation(fields: [follow_id], references: [id], onDelete: Cascade)
+  
+  @@index([user_id])
+  @@index([created_at])
+  @@map("ActivityFeedItem")
+}
+
+enum ActivityType {
+  POST_CREATED
+  RECIPE_CREATED
+  COMMENT_ADDED
+  REACTION_ADDED
+  USER_FOLLOWED
+}
